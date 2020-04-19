@@ -44,27 +44,49 @@ class Board():
         self.start = None
         self.end = None
         self.solve = solve
-        self.container = Frame(root,width=W,height=H,bg='black')
+        self.container = Canvas(root,width=W,height=H,bg='black',bd=0,highlightthickness=0)
         self.container.pack(side=RIGHT)
         self.nodes = self.generate_Nodes()
         self.open = []
+        self.lastWall = None
 
         self.mode = 'PLACE'
         self.wallPlacing = False
         root.bind('<space>',self.change_mode)
-        root.bind('w',self.toggleWall)
 
-        self.placement = Frame(root,width=150,height=H+CPL*2,bg='#fdfdfd')
+        self.container.bind('<B1-Motion>',self._handleWall)
+        self.container.bind('<Double-Button-1>',self.placePoints)
+
+        self.placement = Frame(root,width=150,height=H,bg='#fdfdfd')
         self.placement.pack(side=LEFT)
 
         Label(self.placement,text='A* Pathfinding',justify='center',font=('Arial',22),bg=self.placement['bg']).place(relx=0.5,y=15,anchor='c')
         self.modeL = Label(self.placement,text="Mode: %s"%self.mode,bg=self.placement['bg'])
         self.modeL.place(relx=0.5,y=40,anchor='c')
 
-    def toggleWall(self,e):
-        switch = {True : False, False : True}
-        self.wallPlacing = switch[self.wallPlacing]
+    def placePoints(self,e):
+        x = math.floor(e.x / W * CPL)
+        y = math.floor(e.y / H * CPL)
+        if self.mode == 'PLACE':
+            node = self.getNode([y,x])
+            if self.start == None:
+                self.start = node.pos
+                node.changeState('START')
+            else:
+                self.end = node.pos
+                node.changeState('END')
 
+    def _handleWall(self,e):
+        x = math.floor(e.x / W * CPL)
+        y = math.floor(e.y / H * CPL)
+        node = self.getNode([y,x])
+        if self.mode == 'PLACE' and self.lastWall != node:
+
+            if node.state == 'COVERED':
+                node.changeState("WALL")
+            else:
+                node.changeState("COVERED")
+            self.lastWall = node
 
     def change_mode(self,e):
         mode = {
@@ -108,24 +130,11 @@ class Node():
         self.parent = parent
         self.state = state
         self.root = root
-        self.Obj = Frame(root,width=size,height=size,bg=colors[self.state])
-        self.Obj.grid(row=self.pos[0],column=self.pos[1],padx=1,pady=1)
-
-        self.Obj.bind('<Enter>',lambda x: self._handleWall())
-        self.Obj.bind('<Double-Button-1>',lambda x:self.placePoints())
-
-    def placePoints(self):
-        if self.parent.mode == 'PLACE':
-            if self.parent.start == None:
-                self.parent.start = self.pos
-                self.changeState('START')
-            else:
-                self.parent.end = self.pos
-                self.changeState('END')
+        self.Obj = root.create_rectangle((pos[1]*size),(pos[0]*size),(pos[1]*size)+size,(pos[0]*size)+size,fill=colors[self.state])
 
     def changeState(self,state):
         self.state = state
-        self.Obj['bg'] = colors[self.state]
+        self.root.itemconfig(self.Obj,fill=colors[self.state])
         if state == "OPEN" and state != "START":
             self.updateCost()
 
@@ -176,13 +185,6 @@ class Node():
         if self.state == 'START':
             self.pointTo = 'me!'
 
-    def _handleWall(self):
-        if self.parent.mode == 'PLACE' and self.parent.wallPlacing == True:
-            if self.state == 'COVERED':
-                self.changeState("WALL")
-            else:
-                self.changeState("COVERED")
-
     def __str__(self):
         return 'x: %i,y: %i'%(self.pos[1]+1,self.pos[0]+1)
 
@@ -218,10 +220,8 @@ a = Algorithum()
 
 # board = Board(root,[3,1],[1,6],lambda : print('hi'))
 # board.getNode(board.start).searchNode(inital=True)
-
-W += CPL*2
-H += CPL*2
 root.geometry("%sx%s"%(W+150,H))
+
 
 # things
 
