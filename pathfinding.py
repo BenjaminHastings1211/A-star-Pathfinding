@@ -3,12 +3,12 @@ import random,math,time
 
 W,H = 700,700
 
-CPL = 25
+CPL = 25 # 25
 
 colors = {
-    "COVERED":"#fff",
+    "COVERED":"white",
     "START" : "#00f",
-    "END"   : "#ff0",
+    "END"   : "magenta",
     "OPEN" : "#0f0",
     "CLOSED": "#f00",
     "WALL"  : '#000',
@@ -40,10 +40,11 @@ def CalcHCost(n1,n2):
 
 
 class Board():
-    def __init__(self,root,solve):
+    def __init__(self,root,solve,reset):
         self.start = None
         self.end = None
         self.solve = solve
+        self.AlgorithmReset = reset
         self.container = Canvas(root,width=W,height=H,bg='black',bd=0,highlightthickness=0)
         self.container.pack(side=RIGHT)
         self.nodes = self.generate_Nodes()
@@ -52,7 +53,7 @@ class Board():
 
         self.mode = 'PLACE'
         self.wallPlacing = False
-        root.bind('<space>',self.change_mode)
+        root.bind('<space>',lambda e : self.change_mode())
 
         self.container.bind('<B1-Motion>',self._handleWall)
         self.container.bind('<Double-Button-1>',self.placePoints)
@@ -63,6 +64,58 @@ class Board():
         Label(self.placement,text='A* Pathfinding',justify='center',font=('Arial',22),bg=self.placement['bg']).place(relx=0.5,y=15,anchor='c')
         self.modeL = Label(self.placement,text="Mode: %s"%self.mode,bg=self.placement['bg'])
         self.modeL.place(relx=0.5,y=40,anchor='c')
+
+        self.resetNodeBtn = Button(
+            self.placement,
+            text='Reset Nodes',
+            command=self.resetNodes
+        )
+        self.resetNodeBtn.place(relx=0.5,y=60,anchor='c')
+        self.resetWallsBtn = Button(
+            self.placement,
+            text='Reset Walls',
+            command=self.resetWalls
+        )
+        self.resetWallsBtn.place(relx=0.5,y=85,anchor='c')
+        self.resetAllBtn = Button(
+            self.placement,
+            text='Reset ALL',
+            command=self.resetALL
+        )
+        self.resetAllBtn.place(relx=0.5,y=110,anchor='c')
+
+    def resetNodes(self):
+        self.change_mode(Given='PLACE')
+        self.open.clear()
+        self.AlgorithmReset()
+        for row in self.nodes:
+            for node in row:
+                if node.state != "WALL":
+                    node.reset()
+        try:
+            self.getNode(self.start).changeState('COVERED')
+            self.start = None
+        except: pass
+        try:
+            self.getNode(self.end).changeState('COVERED')
+            self.end = None
+        except: pass
+
+    def resetWalls(self):
+        for row in self.nodes:
+            for node in row:
+                if node.state == 'WALL':
+                    node.changeState('COVERED')
+
+    def resetALL(self):
+        self.start = None
+        self.end = None
+        self.open.clear()
+        self.change_mode(Given='PLACE')
+        self.AlgorithmReset()
+        for row in self.nodes:
+            for node in row:
+                node.reset()
 
     def placePoints(self,e):
         x = math.floor(e.x / W * CPL)
@@ -88,13 +141,16 @@ class Board():
                 node.changeState("COVERED")
             self.lastWall = node
 
-    def change_mode(self,e):
+    def change_mode(self,Given=None):
         mode = {
             'RUN' : 'PLACE',
             'PLACE' : 'RUN'
         }
-        self.mode = mode[self.mode]
-        self.modeL['text'] = "Mode %s"%self.mode
+        if Given != None:
+            self.mode = Given
+        else:
+            self.mode = mode[self.mode]
+        self.modeL['text'] = "Mode: %s"%self.mode
 
     def generate_Nodes(self):
         size = int(W/CPL)
@@ -130,10 +186,18 @@ class Node():
         self.parent = parent
         self.state = state
         self.root = root
-        self.Obj = root.create_rectangle((pos[1]*size),(pos[0]*size),(pos[1]*size)+size,(pos[0]*size)+size,fill=colors[self.state])
+        self.Obj = root.create_rectangle(
+            (pos[1]*size),
+            (pos[0]*size),
+            (pos[1]*size)+size,
+            (pos[0]*size)+size,
+            fill=colors[self.state],
+            # outline=colors[self.state]
+            )
 
     def changeState(self,state):
         self.state = state
+        # self.root.itemconfig(self.Obj,fill=colors[self.state],outline=colors[self.state])
         self.root.itemconfig(self.Obj,fill=colors[self.state])
         if state == "OPEN" and state != "START":
             self.updateCost()
@@ -159,7 +223,7 @@ class Node():
                 if node.state != 'WALL':
                     gCosts.append([node.gCost,node])
 
-                if node.state not in ['CLOSED','START', 'END','WALL']:
+                if node.state not in ['CLOSED','START','END','WALL']:
                     if node not in self.parent.open:
                         self.parent.open.append(node)
                     node.changeState("OPEN")
@@ -185,24 +249,36 @@ class Node():
         if self.state == 'START':
             self.pointTo = 'me!'
 
+    def reset(self):
+        self.changeState('COVERED')
+        self.gCost = 0
+        self.hCost = None
+        self.fCost = None
+        self.pointTo = None
+
     def __str__(self):
         return 'x: %i,y: %i'%(self.pos[1]+1,self.pos[0]+1)
 
 
-class Algorithum():
+class Algorithm():
     def __init__(self):
         self.first = True
         self.done = False
-        self.board = Board(root,self.solved)
+        self.board = Board(root,self.solved,self.reset)
 
     def next(self):
+
         if self.first == True:
             self.board.getNode(self.board.start).searchNode()
             self.first = False
 
         minF = sorted(self.board.open, key=lambda x: x.fCost)[0].fCost
-        check = sorted([node for node in self.board.open if node.fCost == minF], key= lambda x : x.gCost)[0]
-        check.searchNode()
+        check = sorted([node for node in self.board.open if node.fCost == minF], key= lambda x : x.gCost)
+        check[0].searchNode()
+
+    def reset(self):
+        self.done = False
+        self.first = True
 
     def solved(self):
         self.done = True
@@ -216,14 +292,9 @@ root.title('pathfinding')
 root.wm_attributes('-topmost',1)
 root.resizable(0,0)
 
-a = Algorithum()
+a = Algorithm()
 
-# board = Board(root,[3,1],[1,6],lambda : print('hi'))
-# board.getNode(board.start).searchNode(inital=True)
 root.geometry("%sx%s"%(W+150,H))
-
-
-# things
 
 while 1:
     if a.done == False and a.board.mode == 'RUN':
@@ -231,3 +302,4 @@ while 1:
     root.update()
     root.update_idletasks()
     time.sleep(0.001)
+    # time.sleep(0.2)
